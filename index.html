@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EcoVision Pro - Smart Waste Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    h1, h2, h3, h4 {
+      color: #27ae60;
+      margin-bottom: 0.5rem;
+    }
+    .camera-container {
+      position: relative;
+      height: 60vh;
+      margin-bottom: 1rem;
+      background: #000;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .camera-box {
+      width: 100%;
+      height: 100%;
+    }
+    #webcam, #overlay {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      -webkit-transform: scaleX(-1);
+    }
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+    .camera-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 15px;
+      z-index: 2;
+    }
+    .control-btn {
+      background: rgba(0, 0, 0, 0.7);
+      border: none;
+      padding: 12px;
+      border-radius: 50%;
+      color: white;
+      cursor: pointer;
+      transition: 0.3s;
+      font-size: 1rem;
+    }
+    .control-btn:hover {
+      background: rgba(0, 0, 0, 0.9);
+    }
+    .control-btn.active {
+      background: #27ae60;
+    }
+    #results {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 15px;
+      box-shadow: 0 -2px 5px rgba(0,0,0,0.3);
+      max-height: 40%;
+      overflow-y: auto;
+      transition: all 0.3s ease;
+      transform: translateY(100%);
+    }
+    #results.visible {
+      transform: translateY(0);
+    }
+    #performanceWarning {
+      display: none;
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ff4757;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 25px;
+      z-index: 1000;
+      font-size: 0.9rem;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: translateX(-50%) scale(1); }
+      50% { transform: translateX(-50%) scale(1.05); }
+      100% { transform: translateX(-50%) scale(1); }
+    }
+    .science-facts {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .data-card {
+      padding: 1rem;
+      border-left: 4px solid;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .decomposition-timeline {
+      position: relative;
+      height: 40px;
+      background: #e9ecef;
+      border-radius: 20px;
+      overflow: hidden;
+      margin: 1rem 0;
+    }
+    .timeline-bar {
+      height: 100%;
+      transition: width 0.5s ease;
+    }
+    .impact-category {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin: 0.5rem 0;
+    }
+    .impact-icon {
+      font-size: 1.5rem;
+      width: 30px;
+      text-align: center;
+    }
+    .toxicity-meter {
+      width: 100%;
+      height: 8px;
+      background: #dee2e6;
+      border-radius: 4px;
+      margin: 0.5rem 0;
+      position: relative;
+    }
+    .toxicity-level {
+      height: 100%;
+      border-radius: 4px;
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    .solution-card {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      border-left: 4px solid #27ae60;
+    }
+    .solution-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0.5rem 0;
+    }
+    .solution-icon {
+      color: #27ae60;
+      font-size: 1.2rem;
+    }
+    .source-link {
+      color: #27ae60;
+      text-decoration: none;
+      font-size: 0.9rem;
+      display: inline-block;
+      margin-top: 0.5rem;
+    }
+    .loading-indicator {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 1.2rem;
+      z-index: 10;
+    }
+    .loading-indicator.active {
+      display: block;
+    }
+    .error-message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 0, 0, 0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      z-index: 1000;
+      max-width: 80%;
+      text-align: center;
+    }
+    .close-error {
+      position: absolute;
+      top: 5px;
+      right: 10px;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+    .waste-icon {
+      font-size: 1.5rem;
+      margin-right: 10px;
+    }
+    .waste-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      margin-left: 5px;
+    }
+    @media (max-width: 600px) {
+      .camera-container {
+        height: 50vh;
+      }
+      #results {
+        max-height: 50%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="performanceWarning">
+    <i class="fas fa-exclamation-triangle"></i> Low performance detected - Reducing quality
+  </div>
+  
+  <div id="loadingIndicator" class="loading-indicator">
+    <i class="fas fa-spinner fa-spin"></i> Loading AI model...
+  </div>
+  
+  <div id="errorMessage" class="error-message" style="display: none;">
+    <span class="close-error" onclick="document.getElementById('errorMessage').style.display='none'">&times;</span>
+    <div id="errorContent"></div>
+  </div>
+
+  <div class="container">
+    <h1 style="text-align: center; margin: 1rem 0;">
+      <i class="fas fa-leaf"></i> EcoVision Pro
+    </h1>
+    <p style="text-align: center; margin-bottom: 1rem; color: #666;">
+      Smart Waste Analysis with Environmental Solutions
+    </p>
+    <div class="camera-container">
+      <div class="camera-box">
+        <video id="webcam" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+        <div id="cameraLoading" class="loading-indicator">
+          <i class="fas fa-spinner fa-spin"></i> Starting camera...
+        </div>
+      </div>
+      <div class="camera-controls">
+        <button class="control-btn" id="scanButton">
+          <i class="fas fa-search"></i>
+        </button>
+        <button class="control-btn" id="cameraSwitch">
+          <i class="fas fa-camera-retro"></i>
+        </button>
+        <button class="control-btn" id="flipButton">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+        <button class="control-btn" id="torchToggle" disabled>
+          <i class="fas fa-lightbulb"></i>
+        </button>
+      </div>
+      <div id="results"></div>
+    </div>
+  </div>
+  <script>
+    let net;
+    let isScanning = false;
+    let currentStream = null;
+    let frameCount = 0;
+    const PROCESS_EVERY = 5;
+    let qualityMode = (/Mobi|Android/i.test(navigator.userAgent)) ? 'low' : 'high';
+    let currentFacingMode = 'user';
+    let lastStableDetection = null;
+    let lastDetection = null;
+    let stableCount = 0;
+    const STABLE_THRESHOLD = 3;
+
+    // Comprehensive Waste Data with Unique Impact Information
+    const wasteData = {
+      plastic: {
+        icon: 'fas fa-water',
+        color: '#FF4757',
+        decomposition: '450-1000 years',
+        environmentalImpact: {
+          marine: 'Kills 1 million seabirds and 100,000 marine mammals annually',
+          co2: 'Produces 6 kg CO2 per kg of plastic',
+          landfill: 'Accounts for 25% of landfill space',
+          recycling: 'Only 9% of plastic is recycled globally'
+        },
+        solutions: [
+          'Use reusable containers instead of disposable plastic',
+          'Choose products with minimal packaging',
+          'Participate in local plastic recycling programs',
+          'Support legislation to reduce single-use plastics',
+          'Use beeswax wraps instead of plastic wrap'
+        ],
+        references: [
+          { title: "Plastic Pollution Coalition", url: "https://www.plasticpollutioncoalition.org" },
+          { title: "UNEP Plastic Waste", url: "https://www.unep.org/plastic-waste" }
+        ]
+      },
+      paper: {
+        icon: 'fas fa-newspaper',
+        color: '#2ed573',
+        decomposition: '2-6 months',
+        environmentalImpact: {
+          marine: 'Can smother marine vegetation when dumped in water',
+          co2: 'Produces 1 kg CO2 per kg of paper',
+          landfill: 'Decomposes to 40% original volume',
+          recycling: '66% of paper is recycled in developed countries'
+        },
+        solutions: [
+          'Always recycle paper and cardboard',
+          'Use both sides when printing',
+          'Switch to digital documents when possible',
+          'Compost shredded paper at home',
+          'Buy recycled paper products'
+        ],
+        references: [
+          { title: "EPA Paper Recycling", url: "https://www.epa.gov/recycle" },
+          { title: "Paper Recycling Facts", url: "https://www.paperrecycles.org" }
+        ]
+      },
+      metal: {
+        icon: 'fas fa-cogs',
+        color: '#3498db',
+        decomposition: '50-200 years',
+        environmentalImpact: {
+          marine: 'Heavy metals can poison marine life',
+          co2: 'Produces 2.5 kg CO2 per kg of metal',
+          landfill: 'Permanent space occupation',
+          recycling: '90% of steel and 75% of aluminum is recycled'
+        },
+        solutions: [
+          'Recycle all metal cans and containers',
+          'Use reusable metal water bottles',
+          'Repair metal items instead of replacing',
+          'Participate in scrap metal recycling',
+          'Choose products with recycled metal content'
+        ],
+        references: [
+          { title: "Metal Recycling Facts", url: "https://www.isri.org/recycling-commodities/metals" },
+          { title: "Aluminum Recycling", url: "https://www.aluminum.org/recycling" }
+        ]
+      },
+      glass: {
+        icon: 'fas fa-wine-bottle',
+        color: '#9b59b6',
+        decomposition: '1 million years',
+        environmentalImpact: {
+          marine: 'Can injure marine life but is chemically inert',
+          co2: 'Produces 0.7 kg CO2 per kg of glass',
+          landfill: 'Permanent space occupation',
+          recycling: '33% of glass is recycled in the US'
+        },
+        solutions: [
+          'Recycle glass bottles and jars',
+          'Return deposit bottles when possible',
+          'Use glass containers for food storage',
+          'Choose glass over plastic when buying beverages',
+          'Support bottle deposit legislation'
+        ],
+        references: [
+          { title: "Glass Recycling Facts", url: "https://www.gpi.org/glass-recycling-facts" },
+          { title: "Glass Recycling Coalition", url: "https://www.glassrecycles.org" }
+        ]
+      },
+      organic: {
+        icon: 'fas fa-apple-alt',
+        color: '#e67e22',
+        decomposition: '2 weeks - 2 years',
+        environmentalImpact: {
+          marine: 'Can deplete oxygen in water when dumped',
+          co2: 'Produces methane in landfills (25x worse than CO2)',
+          landfill: 'Accounts for 30% of landfill content',
+          recycling: 'Only 5% of food waste is composted'
+        },
+        solutions: [
+          'Compost food scraps at home',
+          'Use a bokashi composting system',
+          'Donate edible food to food banks',
+          'Plan meals to reduce food waste',
+          'Use vegetable scraps for broth'
+        ],
+        references: [
+          { title: "EPA Food Waste", url: "https://www.epa.gov/recycle/reducing-wasted-food-home" },
+          { title: "Composting Guide", url: "https://www.compostingcouncil.org" }
+        ]
+      },
+      electronic: {
+        icon: 'fas fa-laptop',
+        color: '#f1c40f',
+        decomposition: '100-1000 years',
+        environmentalImpact: {
+          marine: 'Toxic heavy metals enter food chain',
+          co2: 'Produces 85 kg CO2 per kg of electronics',
+          landfill: 'Permanent space occupation',
+          recycling: 'Only 17% of e-waste is properly recycled'
+        },
+        solutions: [
+          'Repair electronics instead of replacing',
+          'Donate working electronics',
+          'Use certified e-waste recyclers',
+          'Keep devices longer before upgrading',
+          'Buy refurbished electronics'
+        ],
+        references: [
+          { title: "EPA E-Waste Recycling", url: "https://www.epa.gov/recycle/electronics-donation-and-recycling" },
+          { title: "E-Waste Facts", url: "https://www.ewaste1.com/what-is-e-waste/" }
+        ]
+      }
+    };
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      document.getElementById('errorContent').textContent = message;
+      errorDiv.style.display = 'block';
+    }
+
+    async function setupWebcam() {
+      document.getElementById('cameraLoading').classList.add('active');
+      const video = document.getElementById('webcam');
+      
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+      
+      const constraints = {
+        video: {
+          facingMode: currentFacingMode,
+          width: { ideal: qualityMode === 'high' ? 1280 : 640 },
+          height: { ideal: qualityMode === 'high' ? 720 : 480 },
+          frameRate: { ideal: 15, max: 15 }
+        }
+      };
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        currentStream = stream;
+        
+        const track = stream.getVideoTracks()[0];
+        if (track.getCapabilities().torch) {
+          document.getElementById('torchToggle').disabled = false;
+        }
+        
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => {
+            video.width = video.videoWidth;
+            video.height = video.videoHeight;
+            document.getElementById('cameraLoading').classList.remove('active');
+            resolve(video);
+          };
+          
+          video.onerror = () => {
+            document.getElementById('cameraLoading').classList.remove('active');
+            showError('Failed to load video stream. Please refresh and try again.');
+            resolve(null);
+          };
+        });
+      } catch (err) {
+        console.error('Camera error:', err);
+        document.getElementById('cameraLoading').classList.remove('active');
+        
+        let errorMsg = 'Camera access is required for analysis.';
+        if (err.name === 'NotAllowedError') {
+          errorMsg = 'Please allow camera access to use this feature.';
+        } else if (err.name === 'NotFoundError') {
+          errorMsg = 'No camera found on this device.';
+        }
+        
+        showError(errorMsg);
+        return null;
+      }
+    }
+
+    function toggleFlip() {
+      const video = document.getElementById('webcam');
+      const canvas = document.getElementById('overlay');
+      const currentTransform = video.style.transform;
+      if (currentTransform.includes('-1')) {
+        video.style.transform = 'scaleX(1)';
+        canvas.style.transform = 'scaleX(1)';
+      } else {
+        video.style.transform = 'scaleX(-1)';
+        canvas.style.transform = 'scaleX(-1)';
+      }
+    }
+
+    document.getElementById('cameraSwitch').addEventListener('click', async () => {
+      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      await setupWebcam();
+      if (isScanning) detectObjects();
+    });
+    
+    document.getElementById('flipButton').addEventListener('click', toggleFlip);
+
+    document.getElementById('torchToggle').addEventListener('click', async () => {
+      const track = currentStream?.getVideoTracks()[0];
+      if (!track) return;
+      try {
+        await track.applyConstraints({ advanced: [{ torch: !track.getSettings().torch }] });
+      } catch (err) {
+        console.error('Torch control failed:', err);
+      }
+    });
+
+    function getDecompositionYears(decompString) {
+      if (decompString.includes('million')) return 1000000;
+      const parts = decompString.split('-');
+      return parseInt(parts[parts.length-1].replace(' years','').replace(' months','').trim()) || 1000;
+    }
+
+    function createScienceCard(obj, wasteType) {
+      const data = wasteData[wasteType] || wasteData['plastic'];
+      const decompYears = getDecompositionYears(data.decomposition);
+      
+      return `
+        <div class="science-facts">
+          <h2>
+            <i class="${data.icon} waste-icon" style="color: ${data.color}"></i> 
+            ${wasteType.toUpperCase()} WASTE
+            <span class="waste-badge" style="background: ${data.color}; color: white;">${obj.class}</span>
+          </h2>
+          <p>Confidence: ${Math.round(obj.score * 100)}%</p>
+          
+          <div class="decomposition-timeline">
+            <div class="timeline-bar" style="width: ${Math.min(100, (decompYears/1000000*100)}%; background: ${data.color}"></div>
+          </div>
+          <p><i class="fas fa-hourglass-half"></i> Decomposition: <strong>${data.decomposition}</strong></p>
+          
+          <div class="data-grid">
+            <div class="data-card" style="border-color: ${data.color}">
+              <h4><i class="fas fa-fish"></i> Marine Impact</h4>
+              <p>${data.environmentalImpact.marine}</p>
+            </div>
+            <div class="data-card" style="border-color: ${data.color}">
+              <h4><i class="fas fa-smog"></i> Carbon Footprint</h4>
+              <p>${data.environmentalImpact.co2}</p>
+            </div>
+            <div class="data-card" style="border-color: ${data.color}">
+              <h4><i class="fas fa-trash-alt"></i> Landfill Impact</h4>
+              <p>${data.environmentalImpact.landfill}</p>
+            </div>
+          </div>
+          
+          <div class="solution-card">
+            <h4><i class="fas fa-lightbulb" style="color: ${data.color}"></i> Probable Solutions</h4>
+            ${data.solutions.map((sol, i) => `
+              <div class="solution-item">
+                <i class="fas fa-check-circle solution-icon"></i>
+                <span>${sol}</span>
+              </div>
+            `).join('')}
+          </div>
+          
+          <div style="margin-top: 1rem; font-size: 0.9rem;">
+            <i class="fas fa-info-circle"></i> Recycling rate: ${data.environmentalImpact.recycling}
+          </div>
+        </div>
+      `;
+    }
+
+    function drawDetection(ctx, obj, wasteType) {
+      const data = wasteData[wasteType] || wasteData['plastic'];
+      const color = data.color || '#95a5a6';
+      
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(...obj.bbox);
+      
+      ctx.fillStyle = color;
+      const text = ${obj.class} (${Math.round(obj.score * 100)}%);
+      const textWidth = ctx.measureText(text).width;
+      ctx.fillRect(obj.bbox[0], obj.bbox[1] - 25, textWidth + 15, 25);
+      
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText(text, obj.bbox[0] + 7, obj.bbox[1] - 7);
+    }
+
+    function classifyWasteObject(obj) {
+      const classLower = obj.class.toLowerCase();
+      
+      // Plastic detection
+      if (classLower.includes('bottle') || 
+          classLower.includes('cup') || 
+          classLower.includes('bag') ||
+          classLower.includes('container') ||
+          classLower.includes('wrapper') ||
+          classLower.includes('plastic') ||
+          classLower.includes('straw') ||
+          classLower.includes('packaging') ||
+          classLower.includes('wrap')) {
+        return 'plastic';
+      } 
+      // Metal detection
+      else if (classLower.includes('can') || 
+               classLower.includes('metal') || 
+               classLower.includes('tin') ||
+               classLower.includes('aluminum') ||
+               classLower.includes('steel') ||
+               classLower.includes('foil')) {
+        return 'metal';
+      } 
+      // Paper detection
+      else if (classLower.includes('paper') || 
+               classLower.includes('book') || 
+               classLower.includes('cardboard') ||
+               classLower.includes('box') ||
+               classLower.includes('newspaper') ||
+               classLower.includes('magazine')) {
+        return 'paper';
+      }
+      // Glass detection
+      else if (classLower.includes('glass') || 
+               classLower.includes('jar') || 
+               (classLower.includes('bottle') && !classLower.includes('plastic')) {
+        return 'glass';
+      }
+      // Organic detection
+      else if (classLower.includes('apple') ||
+               classLower.includes('banana') ||
+               classLower.includes('food') ||
+               classLower.includes('vegetable') ||
+               classLower.includes('fruit') ||
+               classLower.includes('compost') ||
+               classLower.includes('leaf')) {
+        return 'organic';
+      }
+      // Electronic detection
+      else if (classLower.includes('laptop') ||
+               classLower.includes('phone') ||
+               classLower.includes('computer') ||
+               classLower.includes('tv') ||
+               classLower.includes('monitor') ||
+               classLower.includes('battery')) {
+        return 'electronic';
+      }
+      
+      return 'unknown';
+    }
+
+    async function detectObjects() {
+      if (!isScanning) return;
+      
+      const startTime = performance.now();
+      frameCount++;
+      
+      if (frameCount % PROCESS_EVERY !== 0) {
+        requestAnimationFrame(detectObjects);
+        return;
+      }
+      
+      try {
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('overlay');
+        const ctx = canvas.getContext('2d');
+        
+        if (video.readyState < 2) {
+          requestAnimationFrame(detectObjects);
+          return;
+        }
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const objects = await net.detect(video);
+        let updatedDetection = null;
+        
+        objects.forEach(obj => {
+          if (obj.score < 0.7) return;
+          
+          const wasteType = classifyWasteObject(obj);
+          drawDetection(ctx, obj, wasteType);
+          
+          if (!updatedDetection || obj.score > updatedDetection.obj.score) {
+            updatedDetection = { obj, wasteType };
+          }
+        });
+        
+        const resultsDiv = document.getElementById('results');
+        
+        if (updatedDetection) {
+          if (lastDetection && 
+              lastDetection.obj.class === updatedDetection.obj.class && 
+              lastDetection.wasteType === updatedDetection.wasteType) {
+            stableCount++;
+          } else {
+            stableCount = 1;
+          }
+          
+          lastDetection = updatedDetection;
+          
+          if (stableCount >= STABLE_THRESHOLD) {
+            lastStableDetection = updatedDetection;
+            resultsDiv.innerHTML = createScienceCard(updatedDetection.obj, updatedDetection.wasteType);
+            resultsDiv.classList.add('visible');
+          }
+        } else {
+          stableCount = 0;
+          lastDetection = null;
+          
+          if (!lastStableDetection) {
+            resultsDiv.classList.remove('visible');
+          }
+        }
+        
+        const processingTime = performance.now() - startTime;
+        
+        if (processingTime > 100 && qualityMode === 'high') {
+          qualityMode = 'low';
+          document.getElementById('performanceWarning').style.display = 'block';
+          setTimeout(() => {
+            document.getElementById('performanceWarning').style.display = 'none';
+          }, 3000);
+          await setupWebcam();
+        }
+      } catch (err) {
+        console.error('Detection error:', err);
+      }
+      
+      requestAnimationFrame(detectObjects);
+    }
+
+    document.getElementById('scanButton').addEventListener('click', async () => {
+      if (!isScanning) {
+        document.getElementById('scanButton').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        document.getElementById('scanButton').disabled = true;
+        
+        const video = await setupWebcam();
+        if (video) {
+          isScanning = true;
+          document.getElementById('scanButton').innerHTML = '<i class="fas fa-stop"></i>';
+          document.getElementById('scanButton').classList.add('active');
+          document.getElementById('scanButton').disabled = false;
+          lastStableDetection = null;
+          detectObjects();
+        } else {
+          document.getElementById('scanButton').innerHTML = '<i class="fas fa-search"></i>';
+          document.getElementById('scanButton').disabled = false;
+        }
+      } else {
+        isScanning = false;
+        document.getElementById('scanButton').innerHTML = '<i class="fas fa-search"></i>';
+        document.getElementById('scanButton').classList.remove('active');
+        
+        const canvas = document.getElementById('overlay');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (!lastStableDetection) {
+          document.getElementById('results').classList.remove('visible');
+        }
+      }
+    });
+
+    (async function init() {
+      try {
+        document.getElementById('loadingIndicator').classList.add('active');
+        
+        net = await cocoSsd.load();
+        
+        document.getElementById('loadingIndicator').classList.remove('active');
+        
+        await setupWebcam();
+        
+        if (/Mobi|Android/i.test(navigator.userAgent)) {
+          document.getElementById('performanceWarning').style.display = 'block';
+          setTimeout(() => {
+            document.getElementById('performanceWarning').style.display = 'none';
+          }, 3000);
+        }
+      } catch (err) {
+        console.error('Initialization error:', err);
+        document.getElementById('loadingIndicator').classList.remove('active');
+        showError('Failed to load the AI model. Please check your internet connection and try again.');
+      }
+    })();
+  </script>
+</body>
+</html>
