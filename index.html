@@ -8,6 +8,42 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
   <style>
+        // Add this CSS in the <style> section or your stylesheet
+    <style>
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0 5px;
+    }
+    
+    .button-label {
+      font-size: 12px;
+      margin-top: 4px;
+      color: #666;
+    }
+    </style>
+    
+    // Modify the buttons in your HTML
+    <div class="button-container">
+      <button id="scanButton"><i class="fas fa-search"></i></button>
+      <span class="button-label">Scan</span>
+    </div>
+    
+    <div class="button-container">
+      <button id="cameraSwitch"><i class="fas fa-camera"></i></button>
+      <span class="button-label">Switch Camera</span>
+    </div>
+    
+    <div class="button-container">
+      <button id="flipButton"><i class="fas fa-sync"></i></button>
+      <span class="button-label">Flip</span>
+    </div>
+    
+    <div class="button-container">
+      <button id="torchToggle" disabled><i class="fas fa-lightbulb"></i></button>
+      <span class="button-label">Torch</span>
+    </div>
     * {
       box-sizing: border-box;
       margin: 0;
