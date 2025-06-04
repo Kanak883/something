@@ -4,66 +4,40 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EcoVision Pro - Smart Waste Analyzer</title>
+  
+  <!-- External Dependencies -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+
   <style>
-        // Add this CSS in the <style> section or your stylesheet
-    <style>
-    .button-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin: 0 5px;
-    }
-    
-    .button-label {
-      font-size: 12px;
-      margin-top: 4px;
-      color: #666;
-    }
-    </style>
-    
-    // Modify the buttons in your HTML
-    <div class="button-container">
-      <button id="scanButton"><i class="fas fa-search"></i></button>
-      <span class="button-label">Scan</span>
-    </div>
-    
-    <div class="button-container">
-      <button id="cameraSwitch"><i class="fas fa-camera"></i></button>
-      <span class="button-label">Switch Camera</span>
-    </div>
-    
-    <div class="button-container">
-      <button id="flipButton"><i class="fas fa-sync"></i></button>
-      <span class="button-label">Flip</span>
-    </div>
-    
-    <div class="button-container">
-      <button id="torchToggle" disabled><i class="fas fa-lightbulb"></i></button>
-      <span class="button-label">Torch</span>
-    </div>
+    /* Base Styles */
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
+
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: #f5f5f5;
       color: #333;
       line-height: 1.6;
     }
+
+    /* Layout & Container */
     .container {
       max-width: 800px;
       margin: 0 auto;
       padding: 1rem;
     }
+
     h1, h2, h3, h4 {
       color: #27ae60;
       margin-bottom: 0.5rem;
     }
+
+    /* Camera Container Styles */
     .camera-container {
       position: relative;
       height: 60vh;
@@ -73,10 +47,12 @@
       overflow: hidden;
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
+
     .camera-box {
       width: 100%;
       height: 100%;
     }
+
     #webcam, #overlay {
       width: 100%;
       height: 100%;
@@ -84,12 +60,15 @@
       transform: scaleX(-1);
       -webkit-transform: scaleX(-1);
     }
+
     #overlay {
       position: absolute;
       top: 0;
       left: 0;
       pointer-events: none;
     }
+
+    /* Camera Controls */
     .camera-controls {
       position: absolute;
       bottom: 20px;
@@ -99,6 +78,7 @@
       gap: 15px;
       z-index: 2;
     }
+
     .control-btn {
       background: rgba(0, 0, 0, 0.7);
       border: none;
@@ -109,12 +89,16 @@
       transition: 0.3s;
       font-size: 1rem;
     }
+
     .control-btn:hover {
       background: rgba(0, 0, 0, 0.9);
     }
+
     .control-btn.active {
       background: #27ae60;
     }
+
+    /* Results Display */
     #results {
       position: absolute;
       bottom: 0;
@@ -128,9 +112,12 @@
       transition: all 0.3s ease;
       transform: translateY(100%);
     }
+
     #results.visible {
       transform: translateY(0);
     }
+
+    /* Warning & Loading Indicators */
     #performanceWarning {
       display: none;
       position: fixed;
@@ -145,67 +132,50 @@
       font-size: 0.9rem;
       animation: pulse 2s infinite;
     }
+
     @keyframes pulse {
       0% { transform: translateX(-50%) scale(1); }
       50% { transform: translateX(-50%) scale(1.05); }
       100% { transform: translateX(-50%) scale(1); }
     }
+
+    /* Science Facts & Data Display */
     .science-facts {
       background: #fff;
       border-radius: 12px;
       padding: 1.5rem;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
+
     .data-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 1rem;
       margin-top: 1rem;
     }
+
     .data-card {
       padding: 1rem;
       border-left: 4px solid;
       background: #f8f9fa;
       border-radius: 8px;
     }
-    .decomposition-timeline {
-      position: relative;
-      height: 40px;
-      background: #e9ecef;
-      border-radius: 20px;
-      overflow: hidden;
-      margin: 1rem 0;
-    }
-    .timeline-bar {
-      height: 100%;
-      transition: width 0.5s ease;
-    }
+
+    /* Environmental Impact Indicators */
     .impact-category {
       display: flex;
       align-items: center;
       gap: 0.8rem;
       margin: 0.5rem 0;
     }
+
     .impact-icon {
       font-size: 1.5rem;
       width: 30px;
       text-align: center;
     }
-    .toxicity-meter {
-      width: 100%;
-      height: 8px;
-      background: #dee2e6;
-      border-radius: 4px;
-      margin: 0.5rem 0;
-      position: relative;
-    }
-    .toxicity-level {
-      height: 100%;
-      border-radius: 4px;
-      position: absolute;
-      left: 0;
-      top: 0;
-    }
+
+    /* Solutions Display */
     .solution-card {
       background: #f8f9fa;
       border-radius: 8px;
@@ -213,23 +183,20 @@
       margin-top: 1rem;
       border-left: 4px solid #27ae60;
     }
+
     .solution-item {
       display: flex;
       align-items: center;
       gap: 10px;
       margin: 0.5rem 0;
     }
+
     .solution-icon {
       color: #27ae60;
       font-size: 1.2rem;
     }
-    .source-link {
-      color: #27ae60;
-      text-decoration: none;
-      font-size: 0.9rem;
-      display: inline-block;
-      margin-top: 0.5rem;
-    }
+
+    /* Loading & Error States */
     .loading-indicator {
       display: none;
       position: absolute;
@@ -240,9 +207,11 @@
       font-size: 1.2rem;
       z-index: 10;
     }
+
     .loading-indicator.active {
       display: block;
     }
+
     .error-message {
       position: fixed;
       top: 50%;
@@ -256,6 +225,7 @@
       max-width: 80%;
       text-align: center;
     }
+
     .close-error {
       position: absolute;
       top: 5px;
@@ -263,10 +233,13 @@
       cursor: pointer;
       font-size: 1.2rem;
     }
+
+    /* Waste Icon Styles */
     .waste-icon {
       font-size: 1.5rem;
       margin-right: 10px;
     }
+
     .waste-badge {
       display: inline-block;
       padding: 3px 8px;
@@ -275,6 +248,8 @@
       font-weight: bold;
       margin-left: 5px;
     }
+
+    /* Responsive Design */
     @media (max-width: 600px) {
       .camera-container {
         height: 50vh;
@@ -286,6 +261,7 @@
   </style>
 </head>
 <body>
+  <!-- Main UI Elements -->
   <div id="performanceWarning">
     <i class="fas fa-exclamation-triangle"></i> Low performance detected - Reducing quality
   </div>
@@ -306,6 +282,8 @@
     <p style="text-align: center; margin-bottom: 1rem; color: #666;">
       Smart Waste Analysis with Environmental Solutions
     </p>
+    
+    <!-- Camera Interface -->
     <div class="camera-container">
       <div class="camera-box">
         <video id="webcam" autoplay muted playsinline></video>
@@ -314,23 +292,43 @@
           <i class="fas fa-spinner fa-spin"></i> Starting camera...
         </div>
       </div>
+      
+      <!-- Camera Controls -->
       <div class="camera-controls">
-        <button class="control-btn" id="scanButton">
-          <i class="fas fa-search"></i>
-        </button>
-        <button class="control-btn" id="cameraSwitch">
-          <i class="fas fa-camera-retro"></i>
-        </button>
-        <button class="control-btn" id="flipButton">
-          <i class="fas fa-sync-alt"></i>
-        </button>
-        <button class="control-btn" id="torchToggle" disabled>
-          <i class="fas fa-lightbulb"></i>
-        </button>
+        <div class="button-container">
+          <button class="control-btn" id="scanButton">
+            <i class="fas fa-search"></i>
+          </button>
+          <span class="button-label">Scan</span>
+        </div>
+        
+        <div class="button-container">
+          <button class="control-btn" id="cameraSwitch">
+            <i class="fas fa-camera-retro"></i>
+          </button>
+          <span class="button-label">Switch Camera</span>
+        </div>
+        
+        <div class="button-container">
+          <button class="control-btn" id="flipButton">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+          <span class="button-label">Flip</span>
+        </div>
+        
+        <div class="button-container">
+          <button class="control-btn" id="torchToggle" disabled>
+            <i class="fas fa-lightbulb"></i>
+          </button>
+          <span class="button-label">Torch</span>
+        </div>
       </div>
+      
+      <!-- Results Display -->
       <div id="results"></div>
     </div>
   </div>
+
   <script>
     let net;
     let isScanning = false;
