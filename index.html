@@ -487,11 +487,12 @@
     async function setupWebcam() {
       document.getElementById('cameraLoading').classList.add('active');
       const video = document.getElementById('webcam');
-      
+
+      // Stop previous stream if any
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
       }
-      
+
       const constraints = {
         video: {
           facingMode: currentFacingMode,
@@ -500,25 +501,27 @@
           frameRate: { ideal: 15, max: 15 }
         }
       };
-      
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
         currentStream = stream;
-        
-        const track = stream.getVideoTracks()[0];
-        if (track.getCapabilities().torch) {
-          document.getElementById('torchToggle').disabled = false;
-        }
-        
+
+        // Play video when metadata is loaded
         return new Promise(resolve => {
           video.onloadedmetadata = () => {
-            video.width = video.videoWidth;
-            video.height = video.videoHeight;
-            document.getElementById('cameraLoading').classList.remove('active');
-            resolve(video);
+            video.play().then(() => {
+              video.width = video.videoWidth;
+              video.height = video.videoHeight;
+              document.getElementById('cameraLoading').classList.remove('active');
+              resolve(video);
+            }).catch(err => {
+              document.getElementById('cameraLoading').classList.remove('active');
+              showError('Unable to start camera playback. Please interact with the page or check permissions.');
+              resolve(null);
+            });
           };
-          
+
           video.onerror = () => {
             document.getElementById('cameraLoading').classList.remove('active');
             showError('Failed to load video stream. Please refresh and try again.');
@@ -528,14 +531,12 @@
       } catch (err) {
         console.error('Camera error:', err);
         document.getElementById('cameraLoading').classList.remove('active');
-        
         let errorMsg = 'Camera access is required for analysis.';
         if (err.name === 'NotAllowedError') {
           errorMsg = 'Please allow camera access to use this feature.';
         } else if (err.name === 'NotFoundError') {
           errorMsg = 'No camera found on this device.';
         }
-        
         showError(errorMsg);
         return null;
       }
