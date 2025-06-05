@@ -518,13 +518,15 @@
             }).catch(err => {
               document.getElementById('cameraLoading').classList.remove('active');
               showError('Unable to start camera playback. Please interact with the page or check permissions.');
+              console.error('video.play() error:', err);
               resolve(null);
             });
           };
 
-          video.onerror = () => {
+          video.onerror = (err) => {
             document.getElementById('cameraLoading').classList.remove('active');
             showError('Failed to load video stream. Please refresh and try again.');
+            console.error('video element error:', err);
             resolve(null);
           };
         });
@@ -761,91 +763,4 @@
           
           lastDetection = updatedDetection;
           
-          if (stableCount >= STABLE_THRESHOLD) {
-            lastStableDetection = updatedDetection;
-            resultsDiv.innerHTML = createScienceCard(updatedDetection.obj, updatedDetection.wasteType);
-            resultsDiv.classList.add('visible');
-          }
-        } else {
-          stableCount = 0;
-          lastDetection = null;
-          
-          if (!lastStableDetection) {
-            resultsDiv.classList.remove('visible');
-          }
-        }
-        
-        const processingTime = performance.now() - startTime;
-        
-        if (processingTime > 100 && qualityMode === 'high') {
-          qualityMode = 'low';
-          document.getElementById('performanceWarning').style.display = 'block';
-          setTimeout(() => {
-            document.getElementById('performanceWarning').style.display = 'none';
-          }, 3000);
-          await setupWebcam();
-        }
-      } catch (err) {
-        console.error('Detection error:', err);
-      }
-      
-      requestAnimationFrame(detectObjects);
-    }
-
-    document.getElementById('scanButton').addEventListener('click', async () => {
-      if (!isScanning) {
-        document.getElementById('scanButton').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        document.getElementById('scanButton').disabled = true;
-        
-        const video = await setupWebcam();
-        if (video) {
-          isScanning = true;
-          document.getElementById('scanButton').innerHTML = '<i class="fas fa-stop"></i>';
-          document.getElementById('scanButton').classList.add('active');
-          document.getElementById('scanButton').disabled = false;
-          lastStableDetection = null;
-          detectObjects();
-        } else {
-          document.getElementById('scanButton').innerHTML = '<i class="fas fa-search"></i>';
-          document.getElementById('scanButton').disabled = false;
-        }
-      } else {
-        isScanning = false;
-        document.getElementById('scanButton').innerHTML = '<i class="fas fa-search"></i>';
-        document.getElementById('scanButton').classList.remove('active');
-        
-        const canvas = document.getElementById('overlay');
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        if (!lastStableDetection) {
-          document.getElementById('results').classList.remove('visible');
-        }
-      }
-    });
-
-    (async function init() {
-      try {
-        document.getElementById('loadingIndicator').classList.add('active');
-        
-        net = await cocoSsd.load();
-        
-        document.getElementById('loadingIndicator').classList.remove('active');
-        
-        await setupWebcam();
-        
-        if (/Mobi|Android/i.test(navigator.userAgent)) {
-          document.getElementById('performanceWarning').style.display = 'block';
-          setTimeout(() => {
-            document.getElementById('performanceWarning').style.display = 'none';
-          }, 3000);
-        }
-      } catch (err) {
-        console.error('Initialization error:', err);
-        document.getElementById('loadingIndicator').classList.remove('active');
-        showError('Failed to load the AI model. Please check your internet connection and try again.');
-      }
-    })();
-  </script>
-</body>
-</html>
+          if
