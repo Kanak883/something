@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EcoVision Pro - Waste Analyzer</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/3.18.0/tf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow-models/2.2.2/coco-ssd.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
   <style>
     * {
@@ -46,7 +46,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* Mirror effect by default */
+      transform: scaleX(-1);
       -webkit-transform: scaleX(-1);
     }
     #overlay {
@@ -78,6 +78,9 @@
     .control-btn:hover {
       background: rgba(0, 0, 0, 0.9);
     }
+    .control-btn.active {
+      background: #27ae60;
+    }
     /* Results overlay */
     #results {
       position: absolute;
@@ -107,43 +110,47 @@
     .science-facts {
       background: #fff;
       border-radius: 12px;
-      padding: 1.5rem;
+      padding: 1rem;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      font-size: 0.9rem;
     }
     .data-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.8rem;
       margin-top: 1rem;
     }
     .data-card {
-      padding: 1rem;
+      padding: 0.8rem;
       border-left: 4px solid;
       background: #f8f9fa;
       border-radius: 8px;
     }
     .impact-number {
-      font-size: 1.2rem;
+      font-size: 1rem;
       font-weight: bold;
       color: #e74c3c;
-      margin: 0.5rem 0;
+      margin: 0.3rem 0;
     }
     .recycling-steps {
-      margin-top: 1rem;
-    }
-    .recycling-steps ol {
-      margin-left: 1.5rem;
-    }
-    .recycling-steps li {
-      margin: 0.5rem 0;
-    }
-    .alternatives-list {
       margin-top: 0.5rem;
     }
+    .recycling-steps ol {
+      margin-left: 1rem;
+      font-size: 0.8rem;
+    }
+    .recycling-steps li {
+      margin: 0.2rem 0;
+    }
+    .alternatives-list {
+      margin-top: 0.3rem;
+      font-size: 0.8rem;
+    }
     .alternatives-list li {
-      margin: 0.3rem 0;
+      margin: 0.2rem 0;
       color: #27ae60;
       font-weight: 500;
+      list-style: none;
     }
     .severity-high { border-left-color: #e74c3c; }
     .severity-medium { border-left-color: #f39c12; }
@@ -156,12 +163,15 @@
       .data-grid {
         grid-template-columns: 1fr;
       }
+      .science-facts {
+        font-size: 0.8rem;
+      }
     }
   </style>
 </head>
 <body>
   <div id="performanceWarning">
-    <i class="fas fa-exclamation-triangle"></i> Optimizing for better performance...
+    <i class="fas fa-exclamation-triangle"></i> Optimizing performance...
   </div>
   <div class="container">
     <h1 style="text-align: center; margin: 1rem 0;">
@@ -182,175 +192,119 @@
         <button class="control-btn" id="flipButton">
           <i class="fas fa-sync-alt"></i>
         </button>
-        <button class="control-btn" id="torchToggle" disabled>
-          <i class="fas fa-lightbulb"></i>
-        </button>
       </div>
-      <div id="results"></div>
+      <div id="results">
+        <p style="text-align: center; color: #666; padding: 20px;">
+          <i class="fas fa-spinner fa-spin"></i> Loading AI model...
+        </p>
+      </div>
     </div>
   </div>
   <script>
-    let net;
+    let net = null;
     let isScanning = false;
     let currentStream = null;
     let frameCount = 0;
-    // Optimized frame processing - skip more frames on mobile
-    const PROCESS_EVERY = (/Mobi|Android/i.test(navigator.userAgent)) ? 10 : 6;
-    // Better quality detection
-    let qualityMode = (/Mobi|Android/i.test(navigator.userAgent)) ? 'mobile' : 'desktop';
+    let animationId = null;
+    
+    // Performance settings
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    const PROCESS_EVERY = isMobile ? 15 : 8;
     let currentFacingMode = 'user';
 
-    // Variables for detection stabilization
+    // Detection stabilization
     let lastDetection = null;
     let stableCount = 0;
-    const STABLE_THRESHOLD = 2; // Reduced for faster response
+    const STABLE_THRESHOLD = 2;
 
-    // Enhanced Environmental Science Data with specific impacts
-    const ecoScienceData = {
+    // Enhanced waste data with specific environmental impacts
+    const wasteData = {
       'plastic_bottle': {
+        name: 'Plastic Bottle',
         decomposition: '450-1000 years',
-        marineImpact: {
-          deaths: '1.5 million marine animals killed annually',
-          microplastics: 'Breaks into 10,000+ microplastic pieces',
-          foodChain: 'Enters food chain via fish consumption'
-        },
-        co2Emissions: '6.2 kg CO2 per kg plastic',
-        recycling: {
-          steps: [
-            'Clean bottle thoroughly',
-            'Remove labels and caps',
-            'Sort by plastic type (PET#1)',
-            'Take to recycling center',
-            'Industrial shredding and melting'
-          ],
-          efficiency: '91% recyclable',
-          newProducts: 'New bottles, clothing fiber, carpets'
-        },
-        alternatives: ['Glass bottles', 'Stainless steel', 'Bamboo bottles', 'Aluminum cans'],
+        marineDeaths: '1.5M marine animals/year',
+        microplastics: '10,000+ pieces per bottle',
+        co2: '6.2 kg CO2 per kg',
+        recycleSteps: ['Clean thoroughly', 'Remove labels', 'Sort by type (PET#1)', 'Take to recycling center'],
+        recycleRate: '91%',
+        alternatives: ['Glass bottles', 'Steel bottles', 'Bamboo bottles'],
         severity: 'high'
       },
       'plastic_cup': {
+        name: 'Plastic Cup',
         decomposition: '50-80 years',
-        marineImpact: {
-          deaths: '800,000 marine animals affected annually',
-          microplastics: 'Breaks into 5,000+ microplastic pieces',
-          foodChain: 'Accumulates in fish stomachs'
-        },
-        co2Emissions: '4.8 kg CO2 per kg plastic',
-        recycling: {
-          steps: [
-            'Rinse cup completely',
-            'Check plastic type (usually PP#5)',
-            'Place in appropriate recycling bin',
-            'Industrial processing into pellets'
-          ],
-          efficiency: '65% recyclable',
-          newProducts: 'Park benches, storage containers, auto parts'
-        },
-        alternatives: ['Paper cups', 'Ceramic mugs', 'Bamboo cups', 'Edible cups'],
+        marineDeaths: '800K marine animals/year',
+        microplastics: '5,000+ pieces per cup',
+        co2: '4.8 kg CO2 per kg',
+        recycleSteps: ['Rinse completely', 'Check type (PP#5)', 'Place in recycling bin', 'Industrial processing'],
+        recycleRate: '65%',
+        alternatives: ['Paper cups', 'Ceramic mugs', 'Bamboo cups'],
         severity: 'high'
       },
       'aluminum_can': {
+        name: 'Aluminum Can',
         decomposition: '80-200 years',
-        marineImpact: {
-          deaths: '200,000 marine animals affected by sharp edges',
-          microplastics: 'No microplastics but leaches aluminum',
-          foodChain: 'Aluminum accumulation in marine organisms'
-        },
-        co2Emissions: '1.8 kg CO2 per kg aluminum',
-        recycling: {
-          steps: [
-            'Empty can completely',
-            'Rinse if needed',
-            'Crush to save space',
-            'Place in metal recycling',
-            'Melting and reshaping (infinite recyclability)'
-          ],
-          efficiency: '95% recyclable',
-          newProducts: 'New cans, car parts, bicycles, aircraft parts'
-        },
+        marineDeaths: '200K marine animals/year',
+        microplastics: 'No microplastics',
+        co2: '1.8 kg CO2 per kg',
+        recycleSteps: ['Empty completely', 'Rinse if needed', 'Crush to save space', 'Metal recycling bin'],
+        recycleRate: '95%',
         alternatives: ['Glass bottles', 'Reusable bottles', 'Carton packaging'],
         severity: 'medium'
       },
       'paper_cup': {
-        decomposition: '20-30 days (if uncoated)',
-        marineImpact: {
-          deaths: 'Low direct impact (50,000 animals)',
-          microplastics: 'Plastic coating creates microplastics',
-          foodChain: 'Minimal bioaccumulation'
-        },
-        co2Emissions: '0.8 kg CO2 per kg paper',
-        recycling: {
-          steps: [
-            'Separate plastic lids',
-            'Check for plastic coating',
-            'Compost if uncoated',
-            'Special recycling for coated cups',
-            'Pulping and reprocessing'
-          ],
-          efficiency: '30% recyclable (due to coating)',
-          newProducts: 'Toilet paper, napkins, cardboard'
-        },
-        alternatives: ['Ceramic mugs', 'Bamboo cups', '100% compostable cups'],
+        name: 'Paper Cup',
+        decomposition: '20-30 days',
+        marineDeaths: '50K marine animals/year',
+        microplastics: 'Coating creates microplastics',
+        co2: '0.8 kg CO2 per kg',
+        recycleSteps: ['Separate plastic lids', 'Check for coating', 'Compost if uncoated', 'Special recycling'],
+        recycleRate: '30%',
+        alternatives: ['Ceramic mugs', '100% compostable cups', 'Bamboo cups'],
         severity: 'low'
       },
       'glass_bottle': {
-        decomposition: '1 million+ years',
-        marineImpact: {
-          deaths: '500,000 marine animals (cutting injuries)',
-          microplastics: 'No microplastics, but sharp fragments',
-          foodChain: 'No bioaccumulation'
-        },
-        co2Emissions: '0.5 kg CO2 per kg glass',
-        recycling: {
-          steps: [
-            'Remove caps and labels',
-            'Rinse thoroughly',
-            'Sort by color (clear, brown, green)',
-            'Crush at recycling facility',
-            'Melt and reshape (infinite recyclability)'
-          ],
-          efficiency: '98% recyclable',
-          newProducts: 'New bottles, jars, fiberglass, decorative items'
-        },
-        alternatives: ['Reusable glass bottles', 'Stainless steel', 'Ceramic containers'],
+        name: 'Glass Bottle',
+        decomposition: '1M+ years',
+        marineDeaths: '500K marine animals/year',
+        microplastics: 'No microplastics',
+        co2: '0.5 kg CO2 per kg',
+        recycleSteps: ['Remove caps', 'Rinse thoroughly', 'Sort by color', 'Glass recycling bin'],
+        recycleRate: '98%',
+        alternatives: ['Reusable glass', 'Stainless steel', 'Ceramic containers'],
         severity: 'low'
       }
     };
 
-    // Enhanced object classification
+    // Classify detected objects into waste types
     function classifyWasteType(obj) {
       const className = obj.class.toLowerCase();
       if (className.includes('bottle')) {
-        if (className.includes('wine') || className.includes('beer')) {
-          return 'glass_bottle';
-        } else {
-          return 'plastic_bottle';
-        }
+        return Math.random() > 0.6 ? 'plastic_bottle' : 'glass_bottle';
       } else if (className.includes('cup')) {
-        return Math.random() > 0.5 ? 'plastic_cup' : 'paper_cup'; // Could be enhanced with better detection
+        return Math.random() > 0.5 ? 'plastic_cup' : 'paper_cup';
       } else if (className.includes('can')) {
         return 'aluminum_can';
-      } else if (className.includes('wine glass') || className.includes('glass')) {
+      } else if (className.includes('wine glass')) {
         return 'glass_bottle';
       }
-      return 'plastic_bottle'; // Default fallback
+      return 'plastic_bottle'; // Default
     }
 
     async function setupWebcam() {
       const video = document.getElementById('webcam');
-      // Stop existing stream if any
+      
+      // Stop existing stream
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
       }
       
-      // Optimized constraints for better performance
       const constraints = {
         video: {
           facingMode: currentFacingMode,
-          width: { ideal: qualityMode === 'desktop' ? 640 : 480 },
-          height: { ideal: qualityMode === 'desktop' ? 480 : 360 },
-          frameRate: { ideal: 15, max: 20 } // Reduced frame rate for better performance
+          width: { ideal: isMobile ? 480 : 640 },
+          height: { ideal: isMobile ? 360 : 480 },
+          frameRate: { ideal: 15, max: 20 }
         }
       };
       
@@ -359,98 +313,55 @@
         video.srcObject = stream;
         currentStream = stream;
         
-        // Enable torch if available
-        const track = stream.getVideoTracks()[0];
-        if (track.getCapabilities && track.getCapabilities().torch) {
-          document.getElementById('torchToggle').disabled = false;
-        }
-        
         return new Promise(resolve => {
           video.onloadedmetadata = () => {
-            video.width = video.videoWidth;
-            video.height = video.videoHeight;
             resolve(video);
           };
         });
       } catch (err) {
         console.error('Camera error:', err);
-        alert('Camera access required for analysis');
+        document.getElementById('results').innerHTML = `
+          <p style="text-align: center; color: #e74c3c; padding: 20px;">
+            <i class="fas fa-exclamation-triangle"></i> Camera access required. Please allow camera permission and refresh.
+          </p>
+        `;
         return null;
       }
     }
 
-    // Toggle mirror effect
-    function toggleFlip() {
-      const video = document.getElementById('webcam');
-      const canvas = document.getElementById('overlay');
-      const currentTransform = video.style.transform;
-      if (currentTransform.includes('-1')) {
-        video.style.transform = 'scaleX(1)';
-        canvas.style.transform = 'scaleX(1)';
-      } else {
-        video.style.transform = 'scaleX(-1)';
-        canvas.style.transform = 'scaleX(-1)';
-      }
-    }
-
-    // Camera switching
-    document.getElementById('cameraSwitch').addEventListener('click', async () => {
-      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-      await setupWebcam();
-      if (isScanning) detectObjects();
-    });
-    
-    document.getElementById('flipButton').addEventListener('click', toggleFlip);
-
-    // Torch control
-    document.getElementById('torchToggle').addEventListener('click', async () => {
-      const track = currentStream?.getVideoTracks()[0];
-      if (!track) return;
-      try {
-        await track.applyConstraints({ advanced: [{ torch: !track.getSettings().torch }] });
-      } catch (err) {
-        console.error('Torch control failed:', err);
-      }
-    });
-
-    function createScienceCard(obj, wasteType) {
-      const data = ecoScienceData[wasteType];
+    function createAnalysisCard(obj, wasteType) {
+      const data = wasteData[wasteType];
       if (!data) return '';
       
       return `
         <div class="science-facts">
-          <h2><i class="fas fa-microscope"></i> Analysis: ${wasteType.replace('_', ' ').toUpperCase()}</h2>
-          <p>Detected: <strong>${obj.class}</strong> (${Math.round(obj.score * 100)}% confidence)</p>
-          <p><strong>Decomposition Time:</strong> ${data.decomposition}</p>
+          <h3><i class="fas fa-microscope"></i> ${data.name} Analysis</h3>
+          <p><strong>Detected:</strong> ${obj.class} (${Math.round(obj.score * 100)}% confidence)</p>
           
           <div class="data-grid">
             <div class="data-card severity-${data.severity}">
               <h4><i class="fas fa-fish"></i> Marine Impact</h4>
-              <div class="impact-number">${data.marineImpact.deaths}</div>
-              <p><strong>Microplastics:</strong> ${data.marineImpact.microplastics}</p>
-              <p><strong>Food Chain:</strong> ${data.marineImpact.foodChain}</p>
+              <div class="impact-number">${data.marineDeaths}</div>
+              <p><strong>Microplastics:</strong> ${data.microplastics}</p>
             </div>
             
             <div class="data-card severity-${data.severity}">
-              <h4><i class="fas fa-industry"></i> CO2 Emissions</h4>
-              <div class="impact-number">${data.co2Emissions}</div>
-              <p>Production and disposal impact per unit weight</p>
+              <h4><i class="fas fa-industry"></i> CO2 Impact</h4>
+              <div class="impact-number">${data.co2}</div>
+              <p><strong>Decomposition:</strong> ${data.decomposition}</p>
             </div>
             
             <div class="data-card severity-low">
-              <h4><i class="fas fa-recycle"></i> Recycling Guide</h4>
-              <p><strong>Efficiency:</strong> ${data.recycling.efficiency}</p>
+              <h4><i class="fas fa-recycle"></i> Recycling (${data.recycleRate})</h4>
               <div class="recycling-steps">
-                <strong>Steps:</strong>
                 <ol>
-                  ${data.recycling.steps.map(step => <li>${step}</li>).join('')}
+                  ${data.recycleSteps.map(step => <li>${step}</li>).join('')}
                 </ol>
               </div>
-              <p><strong>Becomes:</strong> ${data.recycling.newProducts}</p>
             </div>
             
             <div class="data-card severity-low">
-              <h4><i class="fas fa-leaf"></i> Eco Alternatives</h4>
+              <h4><i class="fas fa-leaf"></i> Alternatives</h4>
               <ul class="alternatives-list">
                 ${data.alternatives.map(alt => <li><i class="fas fa-check"></i> ${alt}</li>).join('')}
               </ul>
@@ -466,33 +377,30 @@
         plastic_cup: '#FF6B7D',
         aluminum_can: '#3498db', 
         paper_cup: '#2ed573',
-        glass_bottle: '#9b59b6',
-        unknown: '#95a5a6' 
+        glass_bottle: '#9b59b6'
       };
+      
       const color = colors[wasteType] || '#95a5a6';
-      
       ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2;
       ctx.strokeRect(...obj.bbox);
-      ctx.fillStyle = color;
       
+      // Label
+      ctx.fillStyle = color;
       const text = ${obj.class} (${Math.round(obj.score * 100)}%);
       const textWidth = ctx.measureText(text).width;
-      ctx.fillRect(obj.bbox[0], obj.bbox[1] - 20, textWidth + 10, 20);
+      ctx.fillRect(obj.bbox[0], obj.bbox[1] - 18, textWidth + 8, 18);
       ctx.fillStyle = 'white';
-      ctx.font = '14px Arial';
-      ctx.fillText(text, obj.bbox[0] + 5, obj.bbox[1] - 5);
+      ctx.font = '12px Arial';
+      ctx.fillText(text, obj.bbox[0] + 4, obj.bbox[1] - 5);
     }
 
     async function detectObjects() {
-      if (!isScanning) return;
+      if (!isScanning || !net) return;
       
-      const startTime = performance.now();
       frameCount++;
-      
-      // Skip frames for performance
       if (frameCount % PROCESS_EVERY !== 0) {
-        requestAnimationFrame(detectObjects);
+        animationId = requestAnimationFrame(detectObjects);
         return;
       }
       
@@ -510,7 +418,7 @@
         let highestScore = 0;
         
         objects.forEach(obj => {
-          if (obj.score < 0.6) return; // Lower threshold for better detection
+          if (obj.score < 0.6) return;
           
           const wasteType = classifyWasteType(obj);
           drawDetection(ctx, obj, wasteType);
@@ -521,14 +429,11 @@
           }
         });
         
-        const resultsDiv = document.getElementById('results');
-        
+        // Update results
         if (bestDetection) {
-          if (
-            lastDetection &&
-            lastDetection.obj.class === bestDetection.obj.class &&
-            lastDetection.wasteType === bestDetection.wasteType
-          ) {
+          if (lastDetection && 
+              lastDetection.obj.class === bestDetection.obj.class && 
+              lastDetection.wasteType === bestDetection.wasteType) {
             stableCount++;
           } else {
             stableCount = 1;
@@ -537,71 +442,110 @@
           lastDetection = bestDetection;
           
           if (stableCount >= STABLE_THRESHOLD) {
-            resultsDiv.innerHTML = createScienceCard(bestDetection.obj, bestDetection.wasteType);
+            document.getElementById('results').innerHTML = 
+              createAnalysisCard(bestDetection.obj, bestDetection.wasteType);
           }
         } else {
           stableCount = 0;
           lastDetection = null;
-          if (stableCount === 0) {
-            resultsDiv.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;"><i class="fas fa-search"></i> Point camera at waste items for analysis...</p>';
-          }
-        }
-        
-        // Performance monitoring
-        const processingTime = performance.now() - startTime;
-        if (processingTime > 150 && qualityMode === 'desktop') {
-          qualityMode = 'mobile';
-          document.getElementById('performanceWarning').style.display = 'block';
-          setTimeout(() => {
-            document.getElementById('performanceWarning').style.display = 'none';
-          }, 3000);
         }
         
       } catch (err) {
         console.error('Detection error:', err);
       }
       
-      requestAnimationFrame(detectObjects);
+      animationId = requestAnimationFrame(detectObjects);
     }
 
+    // Event listeners
     document.getElementById('scanButton').addEventListener('click', async () => {
+      const btn = document.getElementById('scanButton');
+      
       if (!isScanning) {
+        if (!net) {
+          document.getElementById('results').innerHTML = 
+            '<p style="text-align: center; color: #ff4757; padding: 20px;">AI model not loaded yet. Please wait...</p>';
+          return;
+        }
+        
         const video = await setupWebcam();
         if (video) {
           isScanning = true;
-          document.getElementById('scanButton').innerHTML = '<i class="fas fa-stop"></i>';
+          btn.innerHTML = '<i class="fas fa-stop"></i>';
+          btn.classList.add('active');
+          document.getElementById('results').innerHTML = 
+            '<p style="text-align: center; color: #666; padding: 20px;"><i class="fas fa-search"></i> Scanning for waste items...</p>';
           detectObjects();
         }
       } else {
         isScanning = false;
-        document.getElementById('scanButton').innerHTML = '<i class="fas fa-search"></i>';
-        document.getElementById('results').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Scanning stopped. Click scan to start again.</p>';
+        btn.innerHTML = '<i class="fas fa-search"></i>';
+        btn.classList.remove('active');
+        
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+        }
+        
         if (currentStream) {
           currentStream.getTracks().forEach(track => track.stop());
         }
+        
+        document.getElementById('results').innerHTML = 
+          '<p style="text-align: center; color: #666; padding: 20px;">Scanning stopped. Click scan to start again.</p>';
       }
     });
 
+    document.getElementById('cameraSwitch').addEventListener('click', async () => {
+      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      if (isScanning) {
+        await setupWebcam();
+      }
+    });
+
+    document.getElementById('flipButton').addEventListener('click', () => {
+      const video = document.getElementById('webcam');
+      const canvas = document.getElementById('overlay');
+      const isFlipped = video.style.transform.includes('-1');
+      
+      if (isFlipped) {
+        video.style.transform = 'scaleX(1)';
+        canvas.style.transform = 'scaleX(1)';
+      } else {
+        video.style.transform = 'scaleX(-1)';
+        canvas.style.transform = 'scaleX(-1)';
+      }
+    });
+
+    // Initialize
     (async function init() {
       try {
-        // Show loading message
-        document.getElementById('results').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Loading AI model...</p>';
-        
+        console.log('Loading TensorFlow model...');
         net = await cocoSsd.load();
+        console.log('Model loaded successfully');
+        
         await setupWebcam();
         
-        document.getElementById('results').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;"><i class="fas fa-play"></i> Ready! Click scan button to start analysis.</p>';
+        document.getElementById('results').innerHTML = `
+          <p style="text-align: center; color: #27ae60; padding: 20px;">
+            <i class="fas fa-check-circle"></i> Ready! Click scan button to analyze waste items.
+          </p>
+        `;
         
-        // Auto-hide performance warning on mobile
-        if (/Mobi|Android/i.test(navigator.userAgent)) {
+        if (isMobile) {
           document.getElementById('performanceWarning').style.display = 'block';
           setTimeout(() => {
             document.getElementById('performanceWarning').style.display = 'none';
-          }, 2000);
+          }, 3000);
         }
+        
       } catch (error) {
         console.error('Initialization error:', error);
-        document.getElementById('results').innerHTML = '<p style="text-align: center; color: #e74c3c; padding: 20px;"><i class="fas fa-exclamation-triangle"></i> Failed to load. Please refresh the page.</p>';
+        document.getElementById('results').innerHTML = `
+          <p style="text-align: center; color: #e74c3c; padding: 20px;">
+            <i class="fas fa-exclamation-triangle"></i> Failed to load AI model. Please refresh the page.
+            <br><small>Error: ${error.message}</small>
+          </p>
+        `;
       }
     })();
   </script>
